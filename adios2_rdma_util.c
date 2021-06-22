@@ -120,7 +120,7 @@ static int init_fabric(struct fabric_state *fabric, const char *ifname)
             "interfaces (verbs, gni, psm2.) To use a compatible fabric that is "
             "being ignored (probably sockets), set the environment variable "
             "FABRIC_IFACE to the interface name. Check the output of fi_info "
-            "to troubleshoot this message.\n");
+            "to troubleshoot this message further.\n");
         fabric->info = NULL;
         return -1;
     }
