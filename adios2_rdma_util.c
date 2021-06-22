@@ -45,7 +45,7 @@ struct fabric_state
 #endif /* SST_HAVE_CRAY_DRC */
 };
 
-static void init_fabric(struct fabric_state *fabric, const char *ifname)
+static int init_fabric(struct fabric_state *fabric, const char *ifname)
 {
     struct fi_info *hints, *info, *originfo, *useinfo;
     struct fi_av_attr av_attr = {0};
@@ -71,7 +71,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
     {
         fprintf(stderr, "ERROR: no fabrics detected.\n");
         fabric->info = NULL;
-        return;
+        return -1;
     }
     fi_freeinfo(hints);
 
@@ -106,7 +106,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
         }
         else
         {
-                fprintf(stderr, "ignoring fabric %s because it's not of a supported type.", prov_name);
+                fprintf(stderr, "ignoring fabric %s because it's not of a supported type.\n", prov_name);
         }
         info = info->next;
     }
@@ -122,7 +122,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
             "FABRIC_IFACE to the interface name. Check the output of fi_info "
             "to troubleshoot this message.\n");
         fabric->info = NULL;
-        return;
+        return -1;
     }
 
     if (info->mode & FI_CONTEXT2)
@@ -180,7 +180,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
     {
         fprintf(stderr, 
                       "ERROR: copying the fabric info failed.\n");
-        return;
+        return -1;
     }
 
         fprintf(stderr,          
@@ -193,7 +193,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
         fprintf(stderr, 
             "ERROR: opening fabric access failed with %d (%s). This is fatal.\n",
             result, fi_strerror(result));
-        return;
+        return -1;
     }
     result = fi_domain(fabric->fabric, info, &fabric->domain, fabric->ctx);
     if (result != FI_SUCCESS)
@@ -201,7 +201,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
        fprintf(stderr,                
             "ERROR: accessing domain failed with %d (%s). This is fatal.\n",
                       result, fi_strerror(result));
-        return;
+        return -1;
     }
     info->ep_attr->type = FI_EP_RDM;
     result = fi_endpoint(fabric->domain, info, &fabric->signal, fabric->ctx);
@@ -210,7 +210,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
         fprintf(stderr,               
             "ERROR: opening endpoint failed with %d (%s). This is fatal.\n",
                       result, fi_strerror(result));
-        return;
+        return -1;
     }
 
     av_attr.type = FI_AV_MAP;
@@ -223,7 +223,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
                       "ERROR: could not initialize address vector, failed with %d "
                       "(%s). This is fatal.\n",
                       result, fi_strerror(result));
-        return;
+        return -1;
     }
     result = fi_ep_bind(fabric->signal, &fabric->av->fid, 0);
     if (result != FI_SUCCESS)
@@ -232,7 +232,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
             "ERROR: could not bind endpoint to address vector, failed with "
                       "%d (%s). This is fatal.\n",
                       result, fi_strerror(result));
-        return;
+        return -1;
     }
 
     cq_attr.size = 0;
@@ -246,7 +246,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
         fprintf(stderr,
             "ERROR: opening completion queue failed with %d (%s). This is fatal.\n",
             result, fi_strerror(result));
-        return;
+        return -1;
     }
 
     result = fi_ep_bind(fabric->signal, &fabric->cq_signal->fid,
@@ -257,7 +257,7 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
             "ERROR: could not bind endpoint to completion queue, failed "
                       "with %d (%s). This is fatal.\n",
                       result, fi_strerror(result));
-        return;
+        return -1;
     }
 
     result = fi_enable(fabric->signal);
@@ -266,15 +266,17 @@ static void init_fabric(struct fabric_state *fabric, const char *ifname)
         fprintf(stderr, 
                       "ERROR: enable endpoint, failed with %d (%s). This is fatal.\n",
                       result, fi_strerror(result));
-        return;
+        return -1;
     }
 
     fprintf(stderr, "INFO: fabric successfully initialized.\n");
 
     fi_freeinfo(originfo);
+
+    return 0;
 }
 
-static void fini_fabric(struct fabric_state *fabric)
+static int fini_fabric(struct fabric_state *fabric)
 {
 
     int res;
@@ -291,7 +293,7 @@ static void fini_fabric(struct fabric_state *fabric)
         fprintf(stderr,
                       "ERROR: could not close ep, failed with %d (%s).\n", res,
                       fi_strerror(res));
-        return;
+        return -1;
     }
 
     res = fi_close((struct fid *)fabric->cq_signal);
@@ -315,7 +317,7 @@ static void fini_fabric(struct fabric_state *fabric)
         fprintf(stderr, 
                       "ERROR: could not close domain, failed with %d (%s).\n", res,
                       fi_strerror(res));
-        return;
+        return -1;
     }
 
     res = fi_close((struct fid *)fabric->fabric);
@@ -324,7 +326,7 @@ static void fini_fabric(struct fabric_state *fabric)
         fprintf(stderr,
                       "ERROR: could not close fabric, failed with %d (%s).\n", res,
                       fi_strerror(res));
-        return;
+        return -1;
     }
 
     fi_freeinfo(fabric->info);
@@ -342,6 +344,8 @@ static void fini_fabric(struct fabric_state *fabric)
 #endif /* SST_HAVE_CRAY_DRC */
 
     fprintf(stderr, "finalized fabric.\n");
+
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -354,10 +358,11 @@ int main(int argc, char **argv)
         ifname = argv[1];
     }
 
-    init_fabric(&fabric, ifname);
-    fini_fabric(&fabric);        
-    
-    return(0);
+    if(init_fabric(&fabric, ifname) == 0) {
+        return fini_fabric(&fabric);        
+    } else {
+        return 1;
+    }
 }   
 
 
